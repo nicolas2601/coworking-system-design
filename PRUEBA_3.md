@@ -457,10 +457,14 @@ trigger `BEFORE INSERT/UPDATE` que valida que la duración del rango corresponda
 
 ### Diagrama ERD (dbdiagram.io)
 
-Pegá este DSL en [dbdiagram.io](https://dbdiagram.io) para ver y exportar el diagrama.
-Una aclaración honesta: dbdiagram no representa FK compuestas, así que la relación
-`reviews → reservations` aparece como FK simple sobre `reservation_id`; en el SQL real es
-compuesta `(reservation_id, user_id)`.
+![Diagrama ERD de la plataforma de coworking](assets/erd.png)
+
+- **Diagrama interactivo:** https://dbdiagram.io/d/Prueba3-6a5ec068067336e1deb86552
+- **Versión vectorial (SVG):** [`assets/erd.svg`](assets/erd.svg)
+
+El DSL de origen está abajo (por si quieren regenerarlo). Una aclaración honesta: dbdiagram no
+representa FK compuestas, así que la relación `reviews → reservations` aparece como FK simple
+sobre `reservation_id`; en el SQL real es compuesta `(reservation_id, user_id)`.
 
 ```dbml
 Table users {
