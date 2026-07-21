@@ -320,7 +320,7 @@ CREATE TABLE locations (
     city        TEXT NOT NULL,
     address     TEXT NOT NULL,
     country     TEXT,
-    timezone    TEXT,          -- IANA tz de la sede (ej. 'America/Bogota') para reportes locales
+    timezone    TEXT NOT NULL, -- IANA tz de la sede (ej. 'America/Bogota') para reportes locales
     is_active   BOOLEAN NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -377,6 +377,7 @@ CREATE TABLE reservations (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (end_at > start_at),
+    CHECK (total_amount = unit_price * quantity - discount_amount),  -- el dinero tiene que cuadrar
     UNIQUE (id, user_id)  -- necesario para la FK compuesta de reviews (ver P4)
 );
 
@@ -438,7 +439,7 @@ CREATE TABLE moderation_actions (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     actor_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     target_type    TEXT NOT NULL CHECK (target_type IN ('review', 'reservation')),
-    target_id      UUID NOT NULL,
+    target_id      UUID NOT NULL,  -- referencia polimórfica: sin FK a propósito, se valida por target_type en la app
     action         TEXT NOT NULL,   -- ej. 'hide_review', 'flag_dispute'
     reason         TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -497,7 +498,7 @@ Table locations {
   city text [not null]
   address text [not null]
   country text
-  timezone text
+  timezone text [not null]
   is_active boolean [not null, default: true]
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
