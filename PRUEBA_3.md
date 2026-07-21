@@ -336,6 +336,7 @@ CREATE TABLE spaces (
     name        TEXT NOT NULL,
     type        space_type NOT NULL,
     capacity    INT NOT NULL CHECK (capacity > 0),  -- aforo de personas, no disponibilidad temporal
+    currency    CHAR(3) NOT NULL DEFAULT 'USD',     -- una sola moneda por espacio (HU-OP-04)
     description TEXT,
     is_active   BOOLEAN NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -351,8 +352,7 @@ CREATE TABLE space_pricing (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     space_id    UUID NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     mode        pricing_mode NOT NULL,
-    price       NUMERIC(12,2) NOT NULL CHECK (price > 0),
-    currency    CHAR(3) NOT NULL DEFAULT 'USD',
+    price       NUMERIC(12,2) NOT NULL CHECK (price > 0),  -- moneda heredada de spaces.currency
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (space_id, mode)     -- un precio por modalidad por espacio
@@ -509,6 +509,7 @@ Table spaces {
   name text [not null]
   type space_type [not null]
   capacity int [not null]
+  currency char(3) [not null]
   description text
   is_active boolean [not null, default: true]
   created_at timestamptz [not null]
@@ -520,7 +521,6 @@ Table space_pricing {
   space_id uuid [ref: > spaces.id, not null]
   mode pricing_mode [not null]
   price decimal [not null]
-  currency char(3) [not null]
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
   indexes { (space_id, mode) [unique] }
