@@ -164,9 +164,9 @@ el modelo de la Parte 2 tenga de dónde agarrarse: **Operador 5 · Reservante 6 
 > **cobrar por cada reserva**.
 
 **Criterios de aceptación:**
-- La comisión se expresa como porcentaje, por defecto 10%.
-- Cuando cambio la comisión, las reservas ya pagadas conservan la que tenían (el histórico no se toca).
-- Solo un administrador de plataforma puede cambiar este valor.
+- La comisión vigente vive en una sola fila de configuración (`platform_settings`), por defecto 10%.
+- Cuando cambio la comisión, las reservas ya pagadas conservan la que tenían (cada pago guarda su tasa como snapshot; el histórico no se toca).
+- Solo un administrador de plataforma puede cambiar este valor, y queda registrado quién lo hizo.
 
 **Complejidad:** Media · **Dependencias:** ninguna.
 
@@ -277,6 +277,16 @@ CREATE TABLE users (
 );
 CREATE TRIGGER trg_users_updated BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Configuración global de la plataforma: la comisión VIGENTE (HU-AD-01).
+-- Una sola fila (patrón id = 1). El histórico no vive acá: cada pago se queda
+-- con su propia tasa como snapshot en payments.
+CREATE TABLE platform_settings (
+    id              SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    commission_rate NUMERIC(5,4) NOT NULL DEFAULT 0.1000 CHECK (commission_rate >= 0),
+    updated_by      UUID REFERENCES users(id),  -- qué admin la cambió por última vez
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- Empresas operadoras
 CREATE TABLE companies (
