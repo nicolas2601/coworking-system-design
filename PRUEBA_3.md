@@ -628,7 +628,9 @@ un rango histórico ya consumido.
 Un cabo que hay que atar: como las reservas `pending` también bloquean el rango (justo para no
 perder la carrera del checkout), un usuario que abandona el pago dejaría el espacio bloqueado
 sin límite. Lo resuelvo con un job que expira las `pending` sin pagar a los N minutos y las
-pasa a `cancelled`, liberando el slot.
+pasa a `cancelled`, liberando el slot. Su gemelo del otro lado: otro job pasa las `confirmed`
+a `completed` una vez que `end_at` ya pasó, y esa transición es la que habilita las reseñas —
+sin ella, `completed` sería un estado inalcanzable.
 
 **P4 — Una reseña por reserva completada, y solo el autor de la reserva puede escribirla.**
 Tres candados:
@@ -696,3 +698,6 @@ que parezca que no las consideré:
 - **Política de reembolsos.** `payment_status` ya contempla `refunded`, pero no definí las reglas
   (cuánto se devuelve según cuándo se cancela la reserva). Es una decisión de negocio: el esquema
   la soporta, la política la dejo fuera del alcance.
+- **Consolidado multi-moneda en reportes.** Como la moneda es por espacio, una empresa puede
+  facturar en varias (COP y USD). Los reportes agregan por moneda (`GROUP BY currency`); un total
+  único consolidado necesitaría una tabla `exchange_rates` con fecha, que queda fuera del alcance.
