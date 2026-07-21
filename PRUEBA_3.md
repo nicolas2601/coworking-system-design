@@ -471,6 +471,13 @@ Table users {
   updated_at timestamptz [not null]
 }
 
+Table platform_settings {
+  id smallint [pk]
+  commission_rate decimal [not null]
+  updated_by uuid [ref: > users.id]
+  updated_at timestamptz [not null]
+}
+
 Table companies {
   id uuid [pk]
   name text [not null]
