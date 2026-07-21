@@ -10,7 +10,7 @@ Nicolás Martínez · Wind Consulting · 2026
 Antes de tirar tablas y flechas quiero dejar claro el criterio con el que trabajé, porque
 al final eso es lo que se está evaluando acá, no la cantidad de entidades.
 
-El brief es a propósito ambiguo, así que en vez de inventar features me até a lo que el
+El brief es deliberadamente ambiguo, así que en vez de inventar features me até a lo que el
 negocio realmente dice: empresas que publican sedes y espacios, usuarios que buscan y
 reservan pagando en línea, una comisión del 10% para la plataforma, reportes mensuales para
 las empresas y reseñas de los usuarios. Cada decisión de diseño la tomé preguntándome dos
@@ -20,15 +20,15 @@ esconderlo.
 
 El documento tiene tres partes: las historias de usuario, el modelo de datos con la
 justificación de cada decisión, y un bonus de cómo lo mapearía a Clean Architecture. Al
-final agregué una sección corta de lo que dejé fuera de alcance a propósito, porque un
-diseño honesto sobre sus límites vale más que uno que finge cubrir todo.
+final agregué una sección con lo que dejé fuera de alcance y por qué; marcar los límites de
+un diseño me parece más útil que fingir que cubre todo.
 
 ---
 
 ## Parte 1 — Historias de usuario
 
 Formato `Como [rol] quiero [acción] para [beneficio]`, con mínimo 3 criterios de aceptación,
-estimación de complejidad y dependencias. Cubrí más del mínimo pedido a propósito, para que
+estimación de complejidad y dependencias. Cubrí más del mínimo pedido de forma intencional, para que
 el modelo de la Parte 2 tenga de dónde agarrarse: **Operador 5 · Reservante 6 · Admin 3 =
 14 historias**.
 
@@ -192,10 +192,9 @@ el modelo de la Parte 2 tenga de dónde agarrarse: **Operador 5 · Reservante 6 
 
 **Complejidad:** Media · **Dependencias:** HU-US-06.
 
-> **Nota:** esta historia la ajusté a propósito después de revisar el modelo. En una primera
-> versión pedía "acciones de moderación registradas" sin que el esquema lo soportara — un
-> caso clásico de historia que no coincide con el modelo. Agregué la tabla `moderation_actions`
-> para que la historia sea realmente implementable.
+> **Nota de diseño:** esta historia necesita un rastro de auditoría, así que la respaldo con la
+> tabla `moderation_actions` (quién moderó qué y cuándo). Sin esa tabla, el criterio de
+> "registrar toda acción de moderación" no sería implementable.
 
 ---
 
@@ -662,10 +661,10 @@ infraestructura como `payments.provider_ref`.
 
 ---
 
-## Lo que dejé afuera a propósito (y por qué)
+## Lo que dejé fuera de alcance (y por qué)
 
-Un diseño honesto sobre sus límites es más útil que uno que finge cubrir todo. Estas cosas las
-vi y decidí conscientemente no meterlas en el alcance de esta prueba:
+Estas cosas las vi y decidí conscientemente no meterlas en esta prueba. Prefiero nombrarlas a
+que parezca que no las consideré:
 
 - **Aislamiento multiempresa a nivel de BD (RLS).** HU-OP-05 exige que un operador nunca vea
   datos de otra empresa. Lo resuelvo en la capa de aplicación (filtrando por las membresías del
