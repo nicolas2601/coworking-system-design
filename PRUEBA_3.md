@@ -381,13 +381,21 @@ CREATE TABLE reservations (
 );
 
 -- Anti-solapamiento a nivel de BD (ver P3): ninguna reserva activa puede pisar
--- el rango de otra para el mismo espacio.
+-- el rango de otra para el mismo espacio. Dejo 'completed' dentro del filtro adrede:
+-- sacarlo permitiria re-reservar un rango historico ya consumido.
 ALTER TABLE reservations
     ADD CONSTRAINT no_overlapping_reservations
     EXCLUDE USING gist (
         space_id WITH =,
         tstzrange(start_at, end_at) WITH &&
     ) WHERE (status IN ('pending', 'confirmed', 'completed'));
+
+-- Ciclo de vida operado por dos jobs (fuera del DDL, en la aplicacion):
+-- 1. Expiracion: las 'pending' sin pagar a los N minutos pasan a 'cancelled' y liberan el
+--    slot (si no, un checkout abandonado bloquearia el rango sin limite, porque las pending
+--    tambien participan del EXCLUDE justamente para no perder la carrera del pago).
+-- 2. Cierre: las 'confirmed' con end_at ya pasado pasan a 'completed' — esa transicion es la
+--    que habilita las resenas; sin ella 'completed' seria un estado inalcanzable.
 
 CREATE INDEX idx_reservations_user     ON reservations (user_id);
 CREATE INDEX idx_reservations_space    ON reservations (space_id);
@@ -600,54 +608,33 @@ Table moderation_actions {
 ### Preguntas de diseño P1–P4
 
 **P1 — Un mismo usuario puede ser operador y reservante a la vez. ¿Cómo lo manejo?**
-Una sola tabla `users` para identidad y login, **sin columna `role` global**. Ser reservante
-es implícito: cualquier usuario autenticado puede reservar. Ser operador es un rol
-*contextual*, modelado como una fila en `company_members` (usuario ↔ empresa). Así el mismo
-registro puede ser las dos cosas al tiempo, sin duplicar identidad. Descarté la columna `role`
-porque fuerza un único rol y rompe la doble capacidad, y descarté tablas separadas
-`operators`/`reservers` porque duplicarían la identidad y el login (un usuario dual necesitaría
-dos filas y dos contraseñas). Como bonus, `company_members` soporta que una empresa tenga
-varios operadores con distinto nivel (`owner/manager/staff`).
+Una sola tabla `users` para identidad y login, **sin columna `role` global**. Reservante es
+implícito (cualquier usuario autenticado reserva); operador es un rol *contextual*: una fila en
+`company_members` (usuario ↔ empresa). El mismo registro puede ser las dos cosas sin duplicar
+identidad. Descarté la columna `role` (fuerza un único rol) y las tablas separadas (duplican
+identidad y login); de paso, `company_members` soporta varios operadores por empresa con niveles.
 
 **P2 — Si mañana hay descuentos por volumen (5 días = 10% off), ¿qué cambio sin romper nada?**
-Agrego una tabla nueva `pricing_rules` (por espacio o empresa: `min_quantity`, `discount_pct`,
-vigencia) que se evalúa al crear la reserva. El resultado ya tiene dónde guardarse: la columna
-`reservations.discount_amount` (que dejé lista con default 0) guarda el descuento aplicado como
-snapshot, y `total_amount` lo refleja. Es un cambio **puramente aditivo**: no toco ninguna
-columna ni tabla existente, solo sumo la tabla de reglas. La clave es que el descuento se
-congela en la reserva, no se recalcula, por la misma razón que el precio: un cambio de reglas
-después no debe alterar reservas viejas.
+Agrego una tabla nueva `pricing_rules` (`min_quantity`, `discount_pct`, vigencia) que se evalúa
+al crear la reserva, y el resultado ya tiene dónde guardarse: `reservations.discount_amount`
+(que dejé lista con default 0) lo congela como snapshot y `total_amount` lo refleja. Cambio
+**puramente aditivo**: no toco ninguna tabla existente. El descuento se congela y no se
+recalcula, por la misma razón que el precio: reglas nuevas no deben alterar reservas viejas.
 
 **P3 — ¿Cómo evito dos reservas solapadas para el mismo espacio en las mismas fechas?**
-En **los dos niveles**, y la fuente de verdad es la base de datos. A nivel de BD uso un
-constraint `EXCLUDE USING gist` (`space_id WITH =`, `tstzrange(start_at, end_at) WITH &&`,
-filtrado por estados activos): garantiza que nunca existan dos reservas activas que se pisen,
-incluso con dos requests concurrentes peleando por el mismo horario — que es justo donde un
-chequeo hecho solo en la app se cae por race condition. A nivel de aplicación igual hago la
-verificación previa de disponibilidad, pero por UX: dar feedback rápido y un error lindo, todo
-dentro de la transacción de creación. La app mejora la experiencia; la BD garantiza la
-integridad. Dejo `completed` dentro del filtro adrede, porque sacarlo permitiría re-reservar
-un rango histórico ya consumido.
-
-Un cabo que hay que atar: como las reservas `pending` también bloquean el rango (justo para no
-perder la carrera del checkout), un usuario que abandona el pago dejaría el espacio bloqueado
-sin límite. Lo resuelvo con un job que expira las `pending` sin pagar a los N minutos y las
-pasa a `cancelled`, liberando el slot. Su gemelo del otro lado: otro job pasa las `confirmed`
-a `completed` una vez que `end_at` ya pasó, y esa transición es la que habilita las reseñas —
-sin ella, `completed` sería un estado inalcanzable.
+En **los dos niveles**, con la BD como fuente de verdad: un constraint `EXCLUDE USING gist`
+(`space_id WITH =`, `tstzrange(start_at, end_at) WITH &&`, filtrado por estados activos)
+garantiza que dos reservas activas nunca se pisen ni con requests concurrentes — donde el
+chequeo solo-en-app se cae por race condition. La app verifica disponibilidad igual, pero por
+UX (feedback rápido); la integridad la garantiza la BD. Las `pending` abandonadas las libera
+un job de expiración a los N minutos (detallado junto al DDL de `reservations`).
 
 **P4 — Una reseña por reserva completada, y solo el autor de la reserva puede escribirla.**
-Tres candados:
-1. `reviews.reservation_id UNIQUE` → una sola reseña por reserva.
-2. **FK compuesta** `reviews(reservation_id, user_id) → reservations(id, user_id)`, apoyada en
-   el `UNIQUE(id, user_id)` de `reservations`. Esto garantiza a nivel de BD que el `user_id`
-   de la reseña es el mismo que hizo la reserva — no es cosmético, es enforcement real. (El
-   `UNIQUE(id, user_id)` parece redundante con el PK, pero no lo es: PostgreSQL exige un
-   constraint único que cubra exactamente las columnas referenciadas para poder soportar la FK
-   compuesta.)
-3. La condición "solo reservas `completed`" la valido con un trigger (además del caso de uso),
-   porque depende del estado de la reserva y ahí un `CHECK` no alcanza.
-   Más el `CHECK (rating BETWEEN 1 AND 5)`.
+Tres candados: (1) `reviews.reservation_id UNIQUE` → una reseña por reserva. (2) **FK
+compuesta** `reviews(reservation_id, user_id) → reservations(id, user_id)`, apoyada en el
+`UNIQUE(id, user_id)` de `reservations`: la BD misma garantiza que quien reseña es quien
+reservó — enforcement real, no cosmético. (3) "Solo `completed`" va con trigger (además del
+caso de uso), porque depende del estado y un `CHECK` no alcanza. Más `CHECK (rating 1..5)`.
 
 ---
 
