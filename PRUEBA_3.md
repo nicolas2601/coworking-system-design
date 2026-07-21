@@ -614,8 +614,13 @@ incluso con dos requests concurrentes peleando por el mismo horario — que es j
 chequeo hecho solo en la app se cae por race condition. A nivel de aplicación igual hago la
 verificación previa de disponibilidad, pero por UX: dar feedback rápido y un error lindo, todo
 dentro de la transacción de creación. La app mejora la experiencia; la BD garantiza la
-integridad. Detalle fino: dejo `completed` dentro del filtro a propósito, porque sacarlo
-permitiría re-reservar un rango histórico ya consumido.
+integridad. Dejo `completed` dentro del filtro adrede, porque sacarlo permitiría re-reservar
+un rango histórico ya consumido.
+
+Un cabo que hay que atar: como las reservas `pending` también bloquean el rango (justo para no
+perder la carrera del checkout), un usuario que abandona el pago dejaría el espacio bloqueado
+sin límite. Lo resuelvo con un job que expira las `pending` sin pagar a los N minutos y las
+pasa a `cancelled`, liberando el slot.
 
 **P4 — Una reseña por reserva completada, y solo el autor de la reserva puede escribirla.**
 Tres candados:
@@ -680,3 +685,6 @@ vi y decidí conscientemente no meterlas en el alcance de esta prueba:
 - **Reintentos de pago.** Modelé un pago por reserva (`UNIQUE`). Si el negocio necesitara varios
   intentos, separaría `payments` en intentos + un pago exitoso, pero para el brief actual uno a
   uno alcanza.
+- **Política de reembolsos.** `payment_status` ya contempla `refunded`, pero no definí las reglas
+  (cuánto se devuelve según cuándo se cancela la reserva). Es una decisión de negocio: el esquema
+  la soporta, la política la dejo fuera del alcance.
