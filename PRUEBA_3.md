@@ -696,9 +696,10 @@ que parezca que no las consideré:
 - **Borrado de usuario (GDPR).** Dejé `reservations.user_id` con `ON DELETE RESTRICT`, así que
   no se puede borrar un usuario con histórico. La estrategia correcta sería anonimizar en vez de
   borrar; lo dejo anotado.
-- **Reintentos de pago.** Modelé un pago por reserva (`UNIQUE`). Si el negocio necesitara varios
-  intentos, separaría `payments` en intentos + un pago exitoso, pero para el brief actual uno a
-  uno alcanza.
+- **Modelado fino de la pasarela de pago.** El índice parcial `UNIQUE (reservation_id) WHERE
+  status='paid'` ya permite varios intentos y un solo pago exitoso. Lo que dejé afuera es la
+  integración real con un proveedor (idempotency keys, webhooks de confirmación asíncrona,
+  conciliación), que excede el brief.
 - **Política de reembolsos.** `payment_status` ya contempla `refunded`, pero no definí las reglas
   (cuánto se devuelve según cuándo se cancela la reserva). Es una decisión de negocio: el esquema
   la soporta, la política la dejo fuera del alcance.
