@@ -164,9 +164,9 @@ el modelo de la Parte 2 tenga de dónde agarrarse: **Operador 5 · Reservante 6 
 > **cobrar por cada reserva**.
 
 **Criterios de aceptación:**
-- La comisión vigente vive en una sola fila de configuración (`platform_settings`), por defecto 10%.
-- Cuando cambio la comisión, las reservas ya pagadas conservan la que tenían (cada pago guarda su tasa como snapshot; el histórico no se toca).
-- Solo un administrador de plataforma puede cambiar este valor, y queda registrado quién lo hizo.
+- La comisión vigente es la última fila de `commission_settings` (tabla append-only), por defecto 10%.
+- Cada cambio queda registrado con el admin que lo hizo y desde cuándo aplica; los valores no se sobrescriben.
+- Las reservas ya pagadas conservan su tasa como snapshot en `payments`; el histórico financiero no se toca.
 
 **Complejidad:** Media · **Dependencias:** ninguna.
 
@@ -277,14 +277,14 @@ CREATE TABLE users (
 CREATE TRIGGER trg_users_updated BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
--- Configuración global de la plataforma: la comisión VIGENTE (HU-AD-01).
--- Una sola fila (patrón id = 1). El histórico no vive acá: cada pago se queda
--- con su propia tasa como snapshot en payments.
-CREATE TABLE platform_settings (
-    id              SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-    commission_rate NUMERIC(5,4) NOT NULL DEFAULT 0.1000 CHECK (commission_rate >= 0),
-    updated_by      UUID REFERENCES users(id),  -- qué admin la cambió por última vez
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+-- Comisión de la plataforma (HU-AD-01). Tabla APPEND-ONLY: cada cambio es una fila nueva,
+-- así queda el rastro de quién la cambió y desde cuándo. La comisión vigente es la fila con
+-- effective_from más reciente; el histórico financiero real vive en payments (snapshot).
+CREATE TABLE commission_settings (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    commission_rate NUMERIC(5,4) NOT NULL CHECK (commission_rate >= 0),
+    effective_from  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    changed_by      UUID NOT NULL REFERENCES users(id)  -- admin que hizo el cambio
 );
 
 -- Empresas operadoras
@@ -473,11 +473,11 @@ Table users {
   updated_at timestamptz [not null]
 }
 
-Table platform_settings {
-  id smallint [pk]
+Table commission_settings {
+  id uuid [pk]
   commission_rate decimal [not null]
-  updated_by uuid [ref: > users.id]
-  updated_at timestamptz [not null]
+  effective_from timestamptz [not null]
+  changed_by uuid [ref: > users.id, not null]
 }
 
 Table companies {
