@@ -396,11 +396,11 @@ CREATE INDEX idx_reservations_start_at ON reservations (start_at); -- reportes p
 CREATE TRIGGER trg_reservations_updated BEFORE UPDATE ON reservations
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
--- Pagos (uno por reserva) con snapshot de comisión.
+-- Pagos: varios intentos posibles por reserva, un solo pago EXITOSO (ver índice parcial abajo).
 -- Sin ON DELETE CASCADE a propósito: el ledger financiero es inmutable.
 CREATE TABLE payments (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reservation_id    UUID NOT NULL UNIQUE REFERENCES reservations(id) ON DELETE RESTRICT,
+    reservation_id    UUID NOT NULL REFERENCES reservations(id) ON DELETE RESTRICT,
     amount            NUMERIC(12,2) NOT NULL CHECK (amount >= 0),         -- lo que paga el usuario
     commission_rate   NUMERIC(5,4)  NOT NULL CHECK (commission_rate >= 0),-- snapshot ej. 0.1000
     commission_amount NUMERIC(12,2) NOT NULL CHECK (commission_amount >= 0),
@@ -414,6 +414,8 @@ CREATE TABLE payments (
 );
 CREATE INDEX idx_payments_paid_at ON payments (paid_at);
 CREATE INDEX idx_payments_status  ON payments (status);
+-- Un solo pago EXITOSO por reserva, pero permitiendo reintentos tras un intento fallido.
+CREATE UNIQUE INDEX uq_payment_paid ON payments (reservation_id) WHERE status = 'paid';
 
 -- Reseñas (una por reserva completada, solo del dueño de la reserva; ver P4)
 CREATE TABLE reviews (
@@ -552,7 +554,7 @@ Table reservations {
 
 Table payments {
   id uuid [pk]
-  reservation_id uuid [ref: - reservations.id, unique, not null]
+  reservation_id uuid [ref: > reservations.id, not null]
   amount decimal [not null]
   commission_rate decimal [not null]
   commission_amount decimal [not null]
